@@ -1,0 +1,303 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <title>K8s0 by wangfakang</title>
+
+    <link rel="stylesheet" href="stylesheets/styles.css">
+    <link rel="stylesheet" href="stylesheets/github-light.css">
+    <script src="javascripts/scale.fix.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+        <h1 class="header">K8s0</h1>
+        <p class="header">k8s simply study</p>
+
+        <ul>
+          <li class="download"><a class="buttons" href="https://github.com/wangfakang/k8s0/zipball/master">Download ZIP</a></li>
+          <li class="download"><a class="buttons" href="https://github.com/wangfakang/k8s0/tarball/master">Download TAR</a></li>
+          <li><a class="buttons github" href="https://github.com/wangfakang/k8s0">View On GitHub</a></li>
+        </ul>
+
+        <p class="header">This project is maintained by <a class="header name" href="https://github.com/wangfakang">wangfakang</a></p>
+
+
+      </header>
+      <section>
+        <p><code>kubernetes的简单学习：</code>
+　　　kubernetes也是一个进行对docker集群的管理，和swarm的功能基本类似，但是kubernetes本身的功能又有
+很多服务发现呀[etcd]，自动化扩容缩容的解决[赋值因子]等．在这里就显得kubernetes比较的重．     </p>
+
+<h1>
+<a id="相关对象定义-------" class="anchor" href="#%E7%9B%B8%E5%85%B3%E5%AF%B9%E8%B1%A1%E5%AE%9A%E4%B9%89-------" aria-hidden="true"><span class="octicon octicon-link"></span></a>相关对象定义：       </h1>
+
+<p>　　　pod:我的理解是一组容器［比如一个web系统包括server容器，数据库容器等］<br>
+　　　service:是对pod的抽象，可以这样理解有可能pod的ip经常的变化，为了使得上游的变化对使用者是透明的
+则进行对pod的统一来代理．
+　　　replicationController:是对pod的复制抽象，用于解决pod的扩容缩容问题。分布式应用为了性能或高可用
+性的考虑，需要复制多份资源，并且根据负载情况动态伸缩．<br>
+　　　label:由于replicationController以及service都是和pod相关联的，则label就是用来标记他们是一组的．   </p>
+
+<p>组件分类：<br>
+　　　master组件：<br>
+　
+    apiserver：封装了对核心对象的增删改查restful　api。其操作对象是：pod,service,replicationController.并持
+久化到etcd（一个分布式强一致性的key/value存储）.<br>
+    scheduler：负责集群的资源调度，为新建的pod分配机器［如新启动的容器在哪一台机器上］.<br>
+    controller-manager：负责执行各种控制器，目前有两类：<br>
+        endpoint-controller：定期关联service和pod，保证service到pod的映射总是最新的.<br>
+        replication-controller：定期关联replicationController和pod，保证replicationController定义的复制数量
+与实际运行pod的数量总是一致的.     </p>
+
+<p>　　　slave组件：        </p>
+
+<pre><code>kubelet：负责管控docker容器，如启动/停止、监控运行状态等。它会定期从etcd获取分配到本机的pod，并根据pod信息
+</code></pre>
+
+<p>启动或停止相应的容器。同时，它也会接收apiserver的HTTP请求，汇报pod的运行状态.<br>
+    proxy：负责为pod提供代理。它会定期从etcd获取所有的service，并根据service信息创建代理。当某个客户pod要访问其
+他pod时，访问请求会经过本机proxy做转发。［相当于对调用者透明上游的变化］.</p>
+
+<p>下面内容来自<a href="http://blog.csdn.net/zhangjun2915/article/details/40598151">天外有菌博客</a>  </p>
+
+<h1>
+<a id="kubernetes的搭建" class="anchor" href="#kubernetes%E7%9A%84%E6%90%AD%E5%BB%BA" aria-hidden="true"><span class="octicon octicon-link"></span></a>kubernetes的搭建：</h1>
+
+<p>搭建环境</p>
+
+<ul>
+<li>
+<p>第一步，我们需要Kuberntes各组件的二进制可执行文件。有以下两种方式获取：</p>
+
+<p>下载源代码自己编译：</p>
+</li>
+</ul>
+
+<pre><code>    git clone https://github.com/GoogleCloudPlatform/kubernetes.git  
+    cd kubernetes/build  
+    ./release.sh  
+</code></pre>
+
+<p>直接下载人家已经编译打包好的tar文件：</p>
+
+<pre><code>wget https://storage.googleapis.com/kubernetes/binaries.tar.gz  
+</code></pre>
+
+<p>自己编译源码需要先安装好golang，编译完之后在kubernetes/_output/release-tars文件夹下可以得到打包文件。直接下载的方式不需要安装其他软件，但可能得不到最新的版本。</p>
+
+<ul>
+<li>第二步，我们还需要etcd的二进制可执行文件，通过如下方式获取：</li>
+</ul>
+
+<pre><code>    wget https://github.com/coreos/etcd/releases/download/v0.4.6/etcd-v0.4.6-linux-amd64.tar.gz  
+    tar xvf etcd-v0.4.6-linux-amd64.tar.gz  
+</code></pre>
+
+<ul>
+<li>第三步，就可以启动各个组件了：
+
+<ul>
+<li>etcd</li>
+</ul>
+</li>
+</ul>
+
+<pre><code>    cd etcd-v0.4.6-linux-amd64  
+    ./etcd  
+</code></pre>
+
+<ul>
+<li>apiserver</li>
+</ul>
+
+<pre><code>    ./apiserver \  
+    -address=127.0.0.1 \  
+    -port=8080 \  
+    -portal_net="172.0.0.0/16" \  
+    -etcd_servers=http://127.0.0.1:4001 \  
+    -machines=127.0.0.1 \  
+    -v=3 \  
+    -logtostderr=false \  
+    -log_dir=./log  
+</code></pre>
+
+<ul>
+<li>scheduler</li>
+</ul>
+
+<pre><code>    ./scheduler -master 127.0.0.1:8080 \  
+    -v=3 \  
+    -logtostderr=false \  
+    -log_dir=./log  
+</code></pre>
+
+<ul>
+<li>controller-manager</li>
+</ul>
+
+<pre><code>    ./controller-manager -master 127.0.0.1:8080 \  
+    -v=3 \  
+    -logtostderr=false \  
+    -log_dir=./log  
+</code></pre>
+
+<ul>
+<li>kubelet</li>
+</ul>
+
+<pre><code>    ./kubelet \  
+    -address=127.0.0.1 \  
+    -port=10250 \  
+    -hostname_override=127.0.0.1 \  
+    -etcd_servers=http://127.0.0.1:4001 \  
+    -v=3 \  
+    -logtostderr=false \  
+    -log_dir=./log  
+</code></pre>
+
+<p>创建pod
+搭好了运行环境后，就可以提交pod了。首先编写pod描述文件，保存为redis.json：</p>
+
+<pre><code>
+    {  
+      "id": "redis",  
+      "desiredState": {  
+        "manifest": {  
+          "version": "v1beta1",  
+          "id": "redis",  
+          "containers": [{  
+            "name": "redis",  
+            "image": "dockerfile/redis",  
+            "imagePullPolicy": "PullIfNotPresent",  
+            "ports": [{  
+              "containerPort": 6379,  
+              "hostPort": 6379  
+            }]  
+          }]  
+        }  
+      },  
+      "labels": {  
+        "name": "redis"  
+      }  
+    }  
+</code></pre>
+
+<p>然后，通过命令行工具kubecfg提交：</p>
+
+<pre><code>./kubecfg -c redis.json create /pods  
+</code></pre>
+
+<p>提交完后，通过kubecfg查看pod状态：</p>
+
+<pre><code>    # ./kubecfg list /pods  
+    ID                  Image(s)            Host                Labels              Status  
+    ----------          ----------          ----------          ----------          ----------  
+    redis               dockerfile/redis    127.0.0.1/          name=redis          Running  
+</code></pre>
+
+<p>Status是Running表示pod已经在容器里运行起来了，可以用"docker ps"命令来查看容器信息:</p>
+
+<pre><code>    # docker ps  
+    CONTAINER ID        IMAGE                     COMMAND                CREATED             STATUS              PORTS                    NAMES  
+    ae83d1e4b1ec        dockerfile/redis:latest   "redis-server /etc/r   19 seconds ago      Up 19 seconds                                k8s_redis.caa18858_redis.default.etcd_1414684622_1b43fe35  
+</code></pre>
+
+<p>创建replicationController</p>
+
+<pre><code>    {  
+        "id": "redisController",  
+        "apiVersion": "v1beta1",  
+        "kind": "ReplicationController",  
+        "desiredState": {  
+          "replicas": 1,  
+          "replicaSelector": {"name": "redis"},  
+          "podTemplate": {  
+            "desiredState": {  
+               "manifest": {  
+                 "version": "v1beta1",  
+                 "id": "redisController",  
+                 "containers": [{  
+                   "name": "redis",  
+                   "image": "dockerfile/redis",  
+                   "imagePullPolicy": "PullIfNotPresent",  
+                   "ports": [{  
+                       "containerPort": 6379,  
+                       "hostPort": 6379  
+                   }]  
+                 }]  
+               }  
+             },  
+             "labels": {"name": "redis"}  
+            }},  
+        "labels": {"name": "redis"}  
+      }  
+
+</code></pre>
+
+<p>然后，通过命令行工具kubecfg提交：</p>
+
+<pre><code>    ./kubecfg -c redisController.json create /replicationControllers   
+</code></pre>
+
+<p>提交完后，通过kubecfg查看replicationController状态：</p>
+
+<pre><code>    # ./kubecfg list /replicationControllers  
+    ID                  Image(s)            Selector            Replicas  
+    ----------          ----------          ----------          ----------  
+    redisController     dockerfile/redis    name=redis          1  
+</code></pre>
+
+<p>同时，1个pod也将被自动创建出来，即使我们故意删除该pod，replicationController也将保证创建1个新pod。</p>
+
+<h1>
+<a id="欢迎一起交流学习-" class="anchor" href="#%E6%AC%A2%E8%BF%8E%E4%B8%80%E8%B5%B7%E4%BA%A4%E6%B5%81%E5%AD%A6%E4%B9%A0-" aria-hidden="true"><span class="octicon octicon-link"></span></a>欢迎一起交流学习 </h1>
+
+<p>在使用中有任何问题，欢迎反馈给我，可以用以下联系方式跟我交流</p>
+
+<ul>
+<li>邮件(1031379296#qq.com, 把#换成@)</li>
+<li>QQ: 1031379296</li>
+<li>weibo: <a href="http://weibo.com/u/2786211992/home">@王发康</a>
+</li>
+</ul>
+
+<h1>
+<a id="thx" class="anchor" href="#thx" aria-hidden="true"><span class="octicon octicon-link"></span></a>Thx</h1>
+
+<ul>
+<li>chunshengsterATgmail.com</li>
+</ul>
+
+<h1>
+<a id="author" class="anchor" href="#author" aria-hidden="true"><span class="octicon octicon-link"></span></a>Author</h1>
+
+<ul>
+<li>Linux\nginx\golang\c\c++爱好者</li>
+<li>欢迎一起交流  一起学习# </li>
+<li>Others say good and Others good</li>
+</ul>
+      </section>
+      <footer>
+        <p><small>Hosted on <a href="https://pages.github.com">GitHub Pages</a> using the Dinky theme</small></p>
+      </footer>
+    </div>
+    <!--[if !IE]><script>fixScale(document);</script><![endif]-->
+		          <script type="text/javascript">
+            var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
+            document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
+          </script>
+          <script type="text/javascript">
+            try {
+              var pageTracker = _gat._getTracker("k8s simply study");
+            pageTracker._trackPageview();
+            } catch(err) {}
+          </script>
+
+  </body>
+</html>
